@@ -41,7 +41,6 @@ jobs:
           name: cloudflared-${{ matrix.os }}-amd64
           path: |
             dist/cloudflared-*
-
   release:
     name: Release cloudflared binaries
     needs: build
