@@ -496,3 +496,77 @@ Read file: .github/workflows/build-release.yml
 
 ---
 
+_**User**_
+
+我编译的cf报错为./cloudflared-linux-amd64 tunnel --no-autoupdate run  --proxy-connect-timeout 30s  --token eyJhIjoiZmYyNDkyNjIxYmUyOGI4ZTE3NDIxYTAxNGVlY2EyNjIiLCJ0IjoiOTUxZmQ1MDQtZWUxNS00MGJkLWJhMWMtYzFkZTQ3MDQyYWYzIiwicyI6Ik1HTXdNMkV3WW1VdE1tSTVOQzAwTVRkaUxXRTNZakl0TW1FMVpqSTRNR1ExTkdJMiJ9
+./cloudflared-linux-amd64: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.32' not found (required by ./cloudflared-linux-amd64)
+./cloudflared-linux-amd64: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found (required by ./cloudflared-linux-amd64)
+
+---
+
+_**Assistant**_
+
+你的报错信息如下：
+
+```
+./cloudflared-linux-amd64: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.32' not found (required by ./cloudflared-linux-amd64)
+./cloudflared-linux-amd64: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found (required by ./cloudflared-linux-amd64)
+```
+
+这说明你在 GitHub Actions（ubuntu-latest，通常是较新版本的 Ubuntu）上编译出来的二进制，**依赖了较高版本的 glibc**，而你本地或服务器的 Linux 系统 glibc 版本较低，导致无法运行。
+
+---
+
+## 解决方案
+
+### 1. 交叉编译为更低 glibc 兼容的二进制（推荐）
+
+最通用的做法是用 [musl libc](https://musl.libc.org/) 静态编译，或者用更老的 glibc 环境（如 ubuntu-20.04 或 alpine）编译。
+
+#### **musl 静态编译（最推荐，兼容性最好）**
+
+Go 支持用 musl 静态编译，生成的二进制可以在绝大多数 Linux 发行版上运行：
+
+```yaml
+- name: Build cloudflared (static, musl)
+  run: |
+    if [ "${{ matrix.os }}" = "windows" ]; then
+      GOOS=windows GOARCH=amd64 go build -o dist/cloudflared-windows-amd64.exe ./cmd/cloudflared
+    else
+      CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -extldflags '-static'" -o dist/cloudflared-linux-amd64 ./cmd/cloudflared
+    fi
+```
+- 关键点：`CGO_ENABLED=0` + `-ldflags="-s -w -extldflags '-static'"`，这样不会依赖宿主机的 glibc 版本。
+
+#### **或者：用更老的构建环境（如 ubuntu-20.04）**
+
+你可以把 `runs-on: ubuntu-latest` 改成 `runs-on: ubuntu-20.04`，但这只能兼容到 glibc 2.31，不能解决所有兼容性问题。
+
+---
+
+## 你的 workflow 修正建议
+
+只需把 build 步骤改成如下即可：
+
+```yaml
+- name: Build cloudflared
+  run: |
+    if [ "${{ matrix.os }}" = "windows" ]; then
+      GOOS=windows GOARCH=amd64 go build -o dist/cloudflared-windows-amd64.exe ./cmd/cloudflared
+    else
+      CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -extldflags '-static'" -o dist/cloudflared-linux-amd64 ./cmd/cloudflared
+    fi
+```
+
+---
+
+## 总结
+
+- 你遇到的是 glibc 兼容性问题，**musl 静态编译是最优解**。
+- 只需在 Linux 构建时加上 `CGO_ENABLED=0` 和静态链接参数即可。
+- 这样编译出来的 cloudflared-linux-amd64 可以在绝大多数 Linux 系统上运行，不再依赖高版本 glibc。
+
+需要我帮你直接修改 workflow 吗？
+
+---
+

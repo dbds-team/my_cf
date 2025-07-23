@@ -32,7 +32,7 @@ jobs:
           if [ "${{ matrix.os }}" = "windows" ]; then
             GOOS=windows GOARCH=amd64 go build -o dist/cloudflared-windows-amd64.exe ./cmd/cloudflared
           else
-            GOOS=linux GOARCH=amd64 go build -o dist/cloudflared-linux-amd64 ./cmd/cloudflared
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -extldflags '-static'" -o dist/cloudflared-linux-amd64 ./cmd/cloudflared
           fi
 
       - name: Upload build artifact
